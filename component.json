@@ -2,7 +2,7 @@
     "name": "user",
     "description": "user component",
     "local": [],
-    "scripts": ["index.js"],
+    "scripts": ["index.js", "permissions.js"],
     "main": "index.js",
     "dependencies": {
         "serandomps/serand": "master"
