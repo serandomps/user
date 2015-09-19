@@ -180,10 +180,13 @@ serand.on('user', 'logout', function (usr) {
     });
 });
 
+var usr;
+var nxt;
+
 if (localStorage.user) {
-    var usr = JSON.parse(localStorage.user);
+    usr = JSON.parse(localStorage.user);
     console.log(usr);
-    var nxt = next(usr.expires);
+    nxt = next(usr.expires);
     if (!nxt) {
         localStorage.removeItem('user');
         return;
