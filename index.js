@@ -6,6 +6,8 @@ var REFRESH_BEFORE = 10 * 1000;
 
 var user;
 
+var refresher;
+
 var send = XMLHttpRequest.prototype.send;
 
 var ajax = $.ajax;
@@ -15,8 +17,6 @@ var fresh = false;
 var pending = false;
 
 var queue = [];
-
-var permissions = {};
 
 $.ajax = function (options) {
     var success = options.success;
@@ -74,6 +74,28 @@ var next = function (expires) {
     return exp > 0 ? exp : null;
 };
 
+var permissions = function (user) {
+    $.ajax({
+        method: 'GET',
+        url: '/apis/v/tokens/' + user.tid,
+        headers: {
+            'x-host': 'accounts.serandives.com'
+        },
+        dataType: 'json',
+        success: function (token) {
+            user.has = token.has;
+            localStorage.user = JSON.stringify(user);
+            console.log('login successful');
+            console.log('next refresh in : ' + Math.floor(next(user.expires) / 1000));
+            setTimeout(refresh, next(user.expires));
+            serand.emit('user', 'logged in', user);
+        },
+        error: function () {
+            serand.emit('user', 'login error');
+        }
+    });
+};
+
 var refresh = function (done) {
     $.ajax({
         method: 'POST',
@@ -125,33 +147,15 @@ serand.on('user', 'authenticate', function (username, password) {
         },
         contentType: 'application/x-www-form-urlencoded',
         dataType: 'json',
-        success: function (data) {
+        success: function (token) {
             user = {
+                tid: token.id,
                 username: username,
-                access: data.access_token,
-                refresh: data.refresh_token,
-                expires: expires(data.expires_in),
-                permissions: {
-                    vehicles: {
-                        self: {
-                            read: '*',
-                            write: '*'
-                        },
-                        all: {
-                            read: '*',
-                            write: '*'
-                        }
-                    }
-                }
+                access: token.access_token,
+                refresh: token.refresh_token,
+                expires: expires(token.expires_in)
             };
-            localStorage.user = JSON.stringify(user);
-            console.log('login successful');
-            console.log('next refresh in : ' + Math.floor(next(user.expires) / 1000));
-            setTimeout(refresh, next(user.expires));
-            if (user) {
-                serand.emit('user', 'logged out');
-            }
-            serand.emit('user', 'logged in', user);
+            permissions(user);
         },
         error: function () {
             serand.emit('user', 'login error');
@@ -192,13 +196,14 @@ if (localStorage.user) {
         return;
     }
     user = usr;
-    setTimeout(function () {
-        console.log('next refresh in : ' + Math.floor(nxt / 1000));
-        setTimeout(refresh, nxt);
-        serand.emit('user', 'logged in', user);
-        console.log('local storage user');
-    }, 0);
+    console.log('next refresh in : ' + Math.floor(nxt / 1000));
+    setTimeout(refresh, nxt);
+    console.log('local storage user');
 }
+
+serand.on('serand', 'ready', function () {
+    serand.emit('user', 'ready', user);
+});
 
 module.exports.can = function (permission, action) {
     var tree = user.permissions || permissions;
