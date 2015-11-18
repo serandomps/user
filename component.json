@@ -5,6 +5,7 @@
     "scripts": ["index.js", "permissions.js"],
     "main": "index.js",
     "dependencies": {
-        "serandomps/serand": "master"
+        "serandomps/serand": "master",
+        "serandomps/utils": "master"
     }
 }
