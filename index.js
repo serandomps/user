@@ -93,6 +93,23 @@ var next = function (expires) {
     return exp > 0 ? exp : null;
 };
 
+var initialize = function() {
+    if(!localStorage.user) {
+        return;
+    }
+    var usr = JSON.parse(localStorage.user);
+    console.log(usr);
+    var nxt = next(usr.expires);
+    if (!nxt) {
+        localStorage.removeItem('user');
+        return;
+    }
+    user = usr;
+    console.log('next refresh in : ' + Math.floor(nxt / 1000));
+    setTimeout(refresh, nxt);
+    console.log('local storage user');
+};
+
 var refresh = function (done) {
     $.ajax({
         method: 'POST',
@@ -130,23 +147,6 @@ var refresh = function (done) {
         }
     });
 };
-
-var usr;
-var nxt;
-
-if (localStorage.user) {
-    usr = JSON.parse(localStorage.user);
-    console.log(usr);
-    nxt = next(usr.expires);
-    if (!nxt) {
-        localStorage.removeItem('user');
-        return;
-    }
-    user = usr;
-    console.log('next refresh in : ' + Math.floor(nxt / 1000));
-    setTimeout(refresh, nxt);
-    console.log('local storage user');
-}
 
 module.exports.can = function (permission, action) {
     var tree = user.permissions || permissions;
@@ -195,3 +195,5 @@ serand.on('user', 'authenticator', function (uri, done) {
         done: done
     };
 });
+
+initialize();
