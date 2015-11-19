@@ -88,8 +88,8 @@ var expires = function (expin) {
     return new Date().getTime() + expin - REFRESH_BEFORE;
 };
 
-var next = function (expin) {
-    var exp = expires(expin) - new Date().getTime();
+var next = function (expires) {
+    var exp = expires - new Date().getTime();
     return exp > 0 ? exp : null;
 };
 
@@ -111,7 +111,7 @@ var refresh = function (done) {
                 username: user.username,
                 access: data.access_token,
                 refresh: data.refresh_token,
-                expires: data.expires_in
+                expires: expires(data.expires_in)
             };
             localStorage.user = JSON.stringify(user);
             console.log('token refresh successful');
