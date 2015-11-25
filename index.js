@@ -9,6 +9,8 @@ var user;
 
 var clientId;
 
+var ready = false;
+
 var send = XMLHttpRequest.prototype.send;
 
 var ajax = $.ajax;
@@ -20,12 +22,18 @@ var pending = false;
 var queue = [];
 
 //anon permissions
-var permissions = {
-
-};
+var permissions = {};
 
 var loginUri = function (clientId, uri) {
     return 'https://accounts.serandives.com/signin?client_id=' + clientId + '&redirect_uri=' + uri
+};
+
+var sayReady = function () {
+    if (!ready) {
+        ready = true;
+        return;
+    }
+    serand.emit('user', 'ready', user);
 };
 
 $.ajax = function (options) {
@@ -36,7 +44,8 @@ $.ajax = function (options) {
             if (!fresh) {
                 console.log('transparently retrying unauthorized request');
                 pending = true;
-                refresh(function (err) {
+                refresh(user, function (err, usr) {
+                    user = usr;
                     fresh = true;
                     pending = false;
                     options.success = success;
@@ -93,24 +102,24 @@ var next = function (expires) {
     return exp > 0 ? exp : null;
 };
 
-var initialize = function() {
-    if(!localStorage.user) {
-        return;
+var initialize = function () {
+    if (!localStorage.user) {
+        return sayReady();
     }
     var usr = JSON.parse(localStorage.user);
     console.log(usr);
     var nxt = next(usr.expires);
     if (!nxt) {
         localStorage.removeItem('user');
-        return;
+        return sayReady();
     }
-    user = usr;
-    console.log('next refresh in : ' + Math.floor(nxt / 1000));
-    setTimeout(refresh, nxt);
-    console.log('local storage user');
+    refresh(usr, function (err, usr) {
+        user = usr;
+        sayReady();
+    });
 };
 
-var refresh = function (done) {
+var refresh = function (usr, done) {
     $.ajax({
         method: 'POST',
         url: '/apis/v/tokens',
@@ -119,31 +128,32 @@ var refresh = function (done) {
         },
         data: {
             grant_type: 'refresh_token',
-            refresh_token: user.refresh
+            refresh_token: usr.refresh
         },
         contentType: 'application/x-www-form-urlencoded',
         dataType: 'json',
         success: function (data) {
-            user = {
-                username: user.username,
+            usr = {
+                username: usr.username,
                 access: data.access_token,
                 refresh: data.refresh_token,
                 expires: expires(data.expires_in)
             };
-            localStorage.user = JSON.stringify(user);
+            localStorage.user = JSON.stringify(usr);
             console.log('token refresh successful');
-            var nxt = next(user.expires);
+            var nxt = next(usr.expires);
             console.log('next refresh in : ' + Math.floor(nxt / 1000));
-            setTimeout(refresh, nxt);
-            if (done) {
-                done();
-            }
+            setTimeout(function () {
+                refresh(usr, function (err, usr) {
+                    user = usr;
+                });
+            }, nxt);
+            done(false, usr);
         },
         error: function (xhr) {
             console.log('token refresh error');
-            if (done) {
-                done(xhr);
-            }
+            localStorage.removeItem('user');
+            done(xhr);
         }
     });
 };
@@ -175,7 +185,7 @@ serand.on('user', 'logout', function (usr) {
 });
 
 serand.on('serand', 'ready', function () {
-    serand.emit('user', 'ready', user);
+    sayReady();
 });
 
 serand.on('user', 'logged in', function (usr) {
@@ -183,7 +193,11 @@ serand.on('user', 'logged in', function (usr) {
     localStorage.user = JSON.stringify(user);
     var nxt = next(user.expires);
     console.log('next refresh in : ' + Math.floor(nxt / 1000));
-    setTimeout(refresh, nxt);
+    setTimeout(function () {
+        refresh(usr, function (err, usr) {
+            user = usr;
+        });
+    }, nxt);
 });
 
 serand.on('user', 'authenticator', function (uri, done) {
