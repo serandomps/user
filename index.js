@@ -25,7 +25,7 @@ var queue = [];
 var permissions = {};
 
 var loginUri = function (clientId, uri) {
-    return 'https://accounts.serandives.com/signin?client_id=' + clientId + '&redirect_uri=' + uri
+    return 'https://accounts.serandives.com/signin?client_id=' + clientId + (uri ? '&redirect_uri=' + uri : '');
 };
 
 var sayReady = function () {
@@ -201,6 +201,10 @@ serand.on('user', 'logged in', function (usr) {
 });
 
 serand.on('user', 'authenticator', function (uri, done) {
+    if (!done) {
+        done = uri;
+        uri = null;
+    }
     if (clientId) {
         return done(false, loginUri(clientId, uri));
     }
