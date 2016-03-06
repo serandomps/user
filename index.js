@@ -64,31 +64,38 @@ $.ajax = function (options) {
         success.apply(null, Array.prototype.slice.call(arguments));
     };
     options.error = function (xhr, status, err) {
-        var usr = user();
-        if (xhr.status === 401) {
-            if (options.token) {
-                error.apply(null, Array.prototype.slice.call(arguments));
-                return;
-            }
-            console.log('transparently retrying unauthorized request');
-            token = true;
-            refresh(usr, function (err, usr) {
-                token = false;
-                user(usr);
-                options.success = success;
-                options.error = error;
-                $.ajax(options);
-                queue.forEach(function (options) {
-                    $.ajax(options);
-                });
-                queue = [];
-                if (err) {
-                    serand.emit('user', 'login');
-                }
-            });
+        if (xhr.status !== 401) {
+            error.apply(null, Array.prototype.slice.call(arguments));
             return;
         }
-        error.apply(null, Array.prototype.slice.call(arguments));
+        if (options.token) {
+            error.apply(null, Array.prototype.slice.call(arguments));
+            return;
+        }
+        console.log('transparently retrying unauthorized request');
+        token = true;
+        refresh(function (err) {
+            token = false;
+            if (err) {
+                error({status: 401});
+                queue.forEach(function (options) {
+                    if (!options.error) {
+                        return;
+                    }
+                    options.error({status: 401});
+                });
+                queue = [];
+                serand.emit('user', 'login');
+                return;
+            }
+            options.success = success;
+            options.error = error;
+            $.ajax(options);
+            queue.forEach(function (options) {
+                $.ajax(options);
+            });
+            queue = [];
+        });
     };
     return ajax.call($, options);
 };
@@ -130,13 +137,17 @@ var initialize = function () {
         user(null);
         return sayReady();
     }
-    refresh(usr, function (err, usr) {
-        user(usr);
+    refresh(function (err) {
         sayReady();
     });
 };
 
-var refresh = function (usr, done) {
+var refresh = function (done) {
+    done = done || none;
+    var usr = user();
+    if (!usr) {
+        return done(true);
+    }
     $.ajax({
         token: true,
         method: 'POST',
@@ -162,9 +173,7 @@ var refresh = function (usr, done) {
             var nxt = next(usr.expires);
             console.log('next refresh in : ' + Math.floor(nxt / 1000));
             setTimeout(function () {
-                refresh(usr, function (err, usr) {
-                    user(usr);
-                });
+                refresh();
             }, nxt);
             done(false, usr);
         },
@@ -212,9 +221,7 @@ serand.on('user', 'logged in', function (usr) {
     var nxt = next(usr.expires);
     console.log('next refresh in : ' + Math.floor(nxt / 1000));
     setTimeout(function () {
-        refresh(usr, function (err, usr) {
-            user(usr);
-        });
+        refresh();
     }, nxt);
 });
 
