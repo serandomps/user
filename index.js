@@ -5,9 +5,19 @@ var perms = require('./permissions');
 
 var REFRESH_BEFORE = 10 * 1000;
 
-var uzer;
+//TODO: move these facebook etc. configs to account-signin, since this relates only to accounts.com
+var context = {
+    serandives: {
+        login: 'https://accounts.serandives.com/signin'
+    },
+    facebook: {
+        login: 'https://www.facebook.com/dialog/oauth',
+        location: 'https://accounts.serandives.com/auth/oauth',
+        scopes: ['email', 'public_profile']
+    }
+};
 
-var clientId;
+var uzer;
 
 var ready = false;
 
@@ -19,13 +29,19 @@ var queue = [];
 
 var token = false;
 
-var pending;
+var boot = false;
 
 //anon permissions
 var permissions = {};
 
-var loginUri = function (clientId, uri) {
-    return 'https://accounts.serandives.com/signin?client_id=' + clientId + (uri ? '&redirect_uri=' + uri : '');
+var loginUri = function (type, location) {
+    var o = context[type];
+    location = location || o.location;
+    var url = o.login + '?client_id=' + o.clientId
+        + (location ? '&redirect_uri=' + location : '')
+        + (o.scopes ? '&scope=' + o.scopes.join(',') : '');
+    console.log(url);
+    return url;
 };
 
 var sayReady = function () {
@@ -37,16 +53,11 @@ var sayReady = function () {
 };
 
 var user = function (usr) {
-    if (usr) {
+    if (usr || usr === null) {
         uzer = usr;
-        localStorage.user = JSON.stringify(usr);
-        return usr;
+        return serand.store('user', uzer);
     }
-    if (usr === undefined) {
-        return uzer || (localStorage.user ? (uzer = JSON.parse(localStorage.user)) : null);
-    }
-    uzer = null;
-    localStorage.removeItem('user');
+    return uzer || (uzer = serand.store('user'));
 };
 
 var none = function () {
@@ -97,24 +108,36 @@ $.ajax = function (options) {
             queue = [];
         });
     };
+    var usr = user();
+    var headers;
+    if (usr) {
+        headers = options.headers || (options.headers = {});
+        headers['Authorization'] = headers['Authorization'] || ('Bearer ' + usr.access);
+    }
+    console.log(options);
     return ajax.call($, options);
 };
 
-XMLHttpRequest.prototype.send = function () {
-    var usr = user();
-    if (usr) {
-        this.setRequestHeader('Authorization', 'Bearer ' + usr.access);
+utils.configs('boot', function (err, config) {
+    var name;
+    var clients = config.clients;
+    console.log(clients);
+    for (name in clients) {
+        console.log(name);
+        if (!clients.hasOwnProperty(name)) {
+            continue;
+        }
+        var o = context[name];
+        o.clientId = clients[name];
+        var pending = o.pending;
+        if (!pending) {
+            continue;
+        }
+        var options = pending.options;
+        pending.done(false, loginUri(name, options.location));
+        delete o.pending;
     }
-    send.apply(this, Array.prototype.slice.call(arguments));
-};
-
-utils.boot(function (err, config) {
-    clientId = config.clientId;
-    if (!pending) {
-        return;
-    }
-    pending.done(false, loginUri(clientId, pending.uri));
-    pending = null;
+    boot = true;
 });
 
 var expires = function (expin) {
@@ -185,6 +208,19 @@ var refresh = function (done) {
     });
 };
 
+var authenticator = function (options, done) {
+    var type = options.type || 'serandives';
+    if (boot) {
+        done(false, loginUri(type, options.location));
+        return;
+    }
+    var o = context[type];
+    o.pending = {
+        options: options,
+        done: done
+    };
+};
+
 module.exports.can = function (permission, action) {
     var usr = user();
     var tree = usr.permissions || permissions;
@@ -225,18 +261,39 @@ serand.on('user', 'logged in', function (usr) {
     }, nxt);
 });
 
-serand.on('user', 'authenticator', function (uri, done) {
+serand.on('user', 'authenticator', function (options, done) {
     if (!done) {
-        done = uri;
-        uri = null;
+        done = options;
+        options = {};
     }
-    if (clientId) {
-        return done(false, loginUri(clientId, uri));
+    authenticator(options, done);
+});
+
+serand.on('user', 'info', function (id, token, done) {
+    if (!done) {
+        done = token;
+        token = null;
     }
-    pending = {
-        uri: uri,
-        done: done
+    var options = {
+        method: 'GET',
+        url: '/apis/v/users/' + id,
+        headers: {
+            'X-Host': 'accounts.serandives.com'
+        },
+        dataType: 'json',
+        success: function (user) {
+            done(false, user);
+        },
+        error: function () {
+            done('permissions error');
+        }
     };
+    if (token) {
+        options.headers['Authorization'] = 'Bearer ' + token;
+    }
+    $.ajax(options);
 });
 
 initialize();
+
+//TODO: token needs to return user id etc. so, later that user id is used to retrieve user info
