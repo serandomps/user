@@ -17,11 +17,11 @@ var context = {
     }
 };
 
-var uzer;
+var user;
+
+var refresher;
 
 var ready = false;
-
-var send = XMLHttpRequest.prototype.send;
 
 var ajax = $.ajax;
 
@@ -44,24 +44,40 @@ var loginUri = function (type, location) {
     return url;
 };
 
-var sayReady = function () {
+var emit = function (usr) {
     if (!ready) {
         ready = true;
-        return;
+        serand.emit('user', 'ready', usr);
+        return usr;
     }
-    serand.emit('user', 'ready', user());
+    if (usr) {
+        user ? serand.emit('user', 'refreshed', usr) : serand.emit('user', 'logged in', usr);
+        return usr;
+    }
+    if (user) {
+        serand.emit('user', 'logged out', null);
+    }
 };
 
-var user = function (usr) {
-    if (usr || usr === null) {
-        uzer = usr;
-        return serand.store('user', uzer);
+var update = function (usr) {
+    user = usr;
+    serand.store('user', usr);
+    if (!usr) {
+        clearTimeout(refresher);
     }
-    return uzer || (uzer = serand.store('user'));
+    return usr;
 };
 
-var none = function () {
+var emitup = function (usr) {
+    emit(usr);
+    update(usr);
+};
 
+var later = function (task, after) {
+    if (refresher) {
+        clearTimeout(refresher);
+    }
+    refresher = setTimeout(task, after);
 };
 
 $.ajax = function (options) {
@@ -69,8 +85,8 @@ $.ajax = function (options) {
         queue.push(options);
         return;
     }
-    var success = options.success || none;
-    var error = options.error || none;
+    var success = options.success || serand.none;
+    var error = options.error || serand.none;
     options.success = function (data, status, xhr) {
         success.apply(null, Array.prototype.slice.call(arguments));
     };
@@ -85,7 +101,7 @@ $.ajax = function (options) {
         }
         console.log('transparently retrying unauthorized request');
         token = true;
-        refresh(function (err) {
+        refresh(user, function (err) {
             token = false;
             if (err) {
                 error({status: 401});
@@ -108,11 +124,10 @@ $.ajax = function (options) {
             queue = [];
         });
     };
-    var usr = user();
     var headers;
-    if (usr) {
+    if (user) {
         headers = options.headers || (options.headers = {});
-        headers['Authorization'] = headers['Authorization'] || ('Bearer ' + usr.access);
+        headers['Authorization'] = headers['Authorization'] || ('Bearer ' + user.access);
     }
     console.log(options);
     return ajax.call($, options);
@@ -123,7 +138,6 @@ utils.configs('boot', function (err, config) {
     var clients = config.clients;
     console.log(clients);
     for (name in clients) {
-        console.log(name);
         if (!clients.hasOwnProperty(name)) {
             continue;
         }
@@ -150,26 +164,24 @@ var next = function (expires) {
 };
 
 var initialize = function () {
-    var usr = user();
+    var usr = serand.store('user');
     if (!usr) {
-        return sayReady();
+        return emitup(null);
     }
     console.log(usr);
     var nxt = next(usr.expires);
     if (!nxt) {
-        user(null);
-        return sayReady();
+        return emitup(null);
     }
-    refresh(function (err) {
-        sayReady();
+    refresh(usr, function (err, usr) {
+        emitup(usr);
     });
 };
 
-var refresh = function (done) {
-    done = done || none;
-    var usr = user();
+var refresh = function (usr, done) {
+    done = done || serand.none;
     if (!usr) {
-        return done(true);
+        return done('!user');
     }
     $.ajax({
         token: true,
@@ -191,18 +203,18 @@ var refresh = function (done) {
                 refresh: data.refresh_token,
                 expires: expires(data.expires_in)
             };
-            user(usr);
+            emitup(usr);
             console.log('token refresh successful');
             var nxt = next(usr.expires);
             console.log('next refresh in : ' + Math.floor(nxt / 1000));
-            setTimeout(function () {
-                refresh();
+            later(function () {
+                refresh(user);
             }, nxt);
-            done(false, usr);
+            done(null, usr);
         },
         error: function (xhr) {
             console.log('token refresh error');
-            user(null);
+            emitup(null);
             done(xhr);
         }
     });
@@ -222,24 +234,24 @@ var authenticator = function (options, done) {
 };
 
 module.exports.can = function (permission, action) {
-    var usr = user();
-    var tree = usr.permissions || permissions;
+    var tree = user.permissions || permissions;
     return perms.can(tree, permission, action);
 };
 
 serand.on('user', 'logout', function () {
-    var usr = user();
+    if (!user) {
+        return;
+    }
     $.ajax({
         method: 'DELETE',
-        url: '/apis/v/tokens/' + usr.access,
+        url: '/apis/v/tokens/' + user.access,
         headers: {
             'X-Host': 'accounts.serandives.com'
         },
         dataType: 'json',
         success: function (data) {
             console.log('logout successful');
-            user(null);
-            serand.emit('user', 'logged out');
+            emitup(null);
         },
         error: function () {
             console.log('logout error');
@@ -249,15 +261,20 @@ serand.on('user', 'logout', function () {
 });
 
 serand.on('serand', 'ready', function () {
-    sayReady();
+    initialize();
+});
+
+serand.on('stored', 'user', function (usr) {
+    emit(usr);
+    user = usr;
 });
 
 serand.on('user', 'logged in', function (usr) {
-    user(usr);
+    update(usr);
     var nxt = next(usr.expires);
     console.log('next refresh in : ' + Math.floor(nxt / 1000));
-    setTimeout(function () {
-        refresh();
+    later(function () {
+        refresh(user);
     }, nxt);
 });
 
@@ -293,7 +310,5 @@ serand.on('user', 'info', function (id, token, done) {
     }
     $.ajax(options);
 });
-
-initialize();
 
 //TODO: token needs to return user id etc. so, later that user id is used to retrieve user info
