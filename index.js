@@ -186,10 +186,7 @@ var refresh = function (usr, done) {
     $.ajax({
         token: true,
         method: 'POST',
-        url: '/apis/v/tokens',
-        headers: {
-            'X-Host': 'accounts.serandives.com'
-        },
+        url: 'https://accounts.serandives.com/apis/v/tokens',
         data: {
             grant_type: 'refresh_token',
             refresh_token: usr.refresh
@@ -244,10 +241,7 @@ serand.on('user', 'logout', function () {
     }
     $.ajax({
         method: 'DELETE',
-        url: '/apis/v/tokens/' + user.access,
-        headers: {
-            'X-Host': 'accounts.serandives.com'
-        },
+        url: 'https://accounts.serandives.com/apis/v/tokens/' + user.access,
         dataType: 'json',
         success: function (data) {
             console.log('logout successful');
@@ -293,10 +287,7 @@ serand.on('user', 'info', function (id, token, done) {
     }
     var options = {
         method: 'GET',
-        url: '/apis/v/users/' + id,
-        headers: {
-            'X-Host': 'accounts.serandives.com'
-        },
+        url: 'https://accounts.serandives.com/apis/v/users/' + id,
         dataType: 'json',
         success: function (user) {
             done(false, user);
