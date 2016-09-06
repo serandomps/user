@@ -8,11 +8,11 @@ var REFRESH_BEFORE = 10 * 1000;
 //TODO: move these facebook etc. configs to account-signin, since this relates only to accounts.com
 var context = {
     serandives: {
-        login: 'https://accounts.serandives.com/signin'
+        login: utils.resolve('accounts://signin')
     },
     facebook: {
         login: 'https://www.facebook.com/dialog/oauth',
-        location: 'https://accounts.serandives.com/auth/oauth',
+        location: utils.resolve('accounts://auth/oauth'),
         scopes: ['email', 'public_profile']
     }
 };
@@ -186,7 +186,7 @@ var refresh = function (usr, done) {
     $.ajax({
         token: true,
         method: 'POST',
-        url: 'https://accounts.serandives.com/apis/v/tokens',
+        url: utils.resolve('accounts://apis/v/tokens'),
         data: {
             grant_type: 'refresh_token',
             refresh_token: usr.refresh
@@ -241,7 +241,7 @@ serand.on('user', 'logout', function () {
     }
     $.ajax({
         method: 'DELETE',
-        url: 'https://accounts.serandives.com/apis/v/tokens/' + user.access,
+        url: utils.resolve('accounts://apis/v/tokens/' + user.access),
         dataType: 'json',
         success: function (data) {
             console.log('logout successful');
@@ -287,7 +287,7 @@ serand.on('user', 'info', function (id, token, done) {
     }
     var options = {
         method: 'GET',
-        url: 'https://accounts.serandives.com/apis/v/users/' + id,
+        url: utils.resolve('accounts://apis/v/users/' + id),
         dataType: 'json',
         success: function (user) {
             done(false, user);
