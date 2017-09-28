@@ -44,6 +44,26 @@ var loginUri = function (type, location) {
     return url;
 };
 
+var findUserInfo = function (user, done) {
+    if (!user) {
+        return done();
+    }
+    serand.emit('token', 'info', user.tid, user.access, function (err, token) {
+        if (err) {
+            return done(err);
+        }
+        user.has = token.has;
+        serand.emit('user', 'info', token.user, user.access, function (err, usr) {
+            if (err) {
+                return done(err);
+            }
+            user.id = usr.id;
+            user.username = usr.email;
+            done(null, user);
+        });
+    });
+};
+
 var emit = function (usr) {
     if (!ready) {
         ready = true;
@@ -174,7 +194,13 @@ var initialize = function () {
         return emitup(null);
     }
     refresh(usr, function (err, usr) {
-        emitup(usr);
+        findUserInfo(usr, function (err, usr) {
+            if (err) {
+                console.error(err)
+                return
+            }
+            emitup(usr);
+        });
     });
 };
 
@@ -194,12 +220,9 @@ var refresh = function (usr, done) {
         contentType: 'application/x-www-form-urlencoded',
         dataType: 'json',
         success: function (data) {
-            usr = {
-                username: usr.username,
-                access: data.access_token,
-                refresh: data.refresh_token,
-                expires: expires(data.expires_in)
-            };
+            usr.access = data.access_token;
+            usr.refresh = data.refresh_token;
+            usr.expires = expires(data.expires_in);
             emitup(usr);
             console.log('token refresh successful');
             var nxt = next(usr.expires);
@@ -264,12 +287,18 @@ serand.on('stored', 'user', function (usr) {
 });
 
 serand.on('user', 'logged in', function (usr) {
-    update(usr);
-    var nxt = next(usr.expires);
-    console.log('next refresh in : ' + Math.floor(nxt / 1000));
-    later(function () {
-        refresh(user);
-    }, nxt);
+    findUserInfo(usr, function (err, usr) {
+        if (err) {
+            console.error(err)
+            return
+        }
+        update(usr);
+        var nxt = next(usr.expires);
+        console.log('next refresh in : ' + Math.floor(nxt / 1000));
+        later(function () {
+            refresh(user);
+        }, nxt);
+    });
 });
 
 serand.on('user', 'authenticator', function (options, done) {
