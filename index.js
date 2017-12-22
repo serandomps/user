@@ -5,6 +5,8 @@ var perms = require('./permissions');
 
 var REFRESH_BEFORE = 10 * 1000;
 
+var MAX_TIMEOUT_DELAY = 2147483647;
+
 //TODO: move these facebook etc. configs to account-signin, since this relates only to accounts.com
 var context = {
     serandives: {
@@ -97,7 +99,7 @@ var later = function (task, after) {
     if (refresher) {
         clearTimeout(refresher);
     }
-    refresher = setTimeout(task, after);
+    refresher = setTimeout(task, after < MAX_TIMEOUT_DELAY ? after : MAX_TIMEOUT_DELAY);
 };
 
 $.ajax = function (options) {
