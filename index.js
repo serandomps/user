@@ -170,7 +170,7 @@ utils.configs('boot', function (err, config) {
             continue;
         }
         var options = pending.options;
-        pending.done(false, loginUri(name, options.location));
+        pending.done(null, loginUri(name, options.location));
         delete o.pending;
     }
     boot = true;
@@ -245,7 +245,7 @@ var refresh = function (usr, done) {
 var authenticator = function (options, done) {
     var type = options.type || 'serandives';
     if (boot) {
-        done(false, loginUri(type, options.location));
+        done(null, loginUri(type, options.location));
         return;
     }
     var o = context[type];
@@ -269,12 +269,10 @@ serand.on('user', 'logout', function () {
         url: utils.resolve('accounts://apis/v/tokens/' + user.access),
         dataType: 'json',
         success: function (data) {
-            console.log('logout successful');
             emitup(null);
         },
-        error: function () {
-            console.log('logout error');
-            serand.emit('user', 'logout error');
+        error: function (xhr, status, err) {
+            serand.emit('user', 'logout error', err || status || xhr);
         }
     });
 });
@@ -321,10 +319,10 @@ serand.on('user', 'info', function (id, token, done) {
         url: utils.resolve('accounts://apis/v/users/' + id),
         dataType: 'json',
         success: function (user) {
-            done(false, user);
+            done(null, user);
         },
-        error: function () {
-            done('permissions error');
+        error: function (xhr, status, err) {
+            done(err || status || xhr);
         }
     };
     if (token) {
