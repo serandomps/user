@@ -42,7 +42,6 @@ var loginUri = function (type, location) {
     var url = o.login + '?client_id=' + o.clientId
         + (location ? '&redirect_uri=' + location : '')
         + (o.scopes ? '&scope=' + o.scopes.join(',') : '');
-    console.log(url);
     return url;
 };
 
@@ -156,9 +155,11 @@ $.ajax = function (options) {
 };
 
 utils.configs('boot', function (err, config) {
+    if (err) {
+        return console.error(err);
+    }
     var name;
     var clients = config.clients;
-    console.log(clients);
     for (name in clients) {
         if (!clients.hasOwnProperty(name)) {
             continue;
@@ -245,8 +246,7 @@ var refresh = function (usr, done) {
 var authenticator = function (options, done) {
     var type = options.type || 'serandives';
     if (boot) {
-        done(null, loginUri(type, options.location));
-        return;
+        return done(null, loginUri(type, options.location));
     }
     var o = context[type];
     o.pending = {
