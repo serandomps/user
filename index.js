@@ -106,17 +106,14 @@ $.ajax = function (options) {
         queue.push(options);
         return;
     }
+    options.count = options.count || 0;
     var success = options.success || serand.none;
     var error = options.error || serand.none;
     options.success = function (data, status, xhr) {
         success.apply(null, Array.prototype.slice.call(arguments));
     };
     options.error = function (xhr, status, err) {
-        if (xhr.status !== 401) {
-            error.apply(null, Array.prototype.slice.call(arguments));
-            return;
-        }
-        if (options.token) {
+        if (xhr.status !== 401 || options.token || options.count > 0 || options.primary) {
             error.apply(null, Array.prototype.slice.call(arguments));
             return;
         }
@@ -138,6 +135,7 @@ $.ajax = function (options) {
             }
             options.success = success;
             options.error = error;
+            options.count++;
             $.ajax(options);
             queue.forEach(function (options) {
                 $.ajax(options);
@@ -235,7 +233,7 @@ var refresh = function (usr, done) {
             }, nxt);
             done(null, usr);
         },
-        error: function (xhr) {
+        error: function (xhr, one, two) {
             console.log('token refresh error');
             emitup(null);
             done(xhr);
