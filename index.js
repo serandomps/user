@@ -53,7 +53,6 @@ var findUserInfo = function (user, done) {
         if (err) {
             return done(err);
         }
-        user.has = token.has;
         serand.emit('user', 'info', token.user, user.access, function (err, usr) {
             if (err) {
                 return done(err);
