@@ -47,7 +47,7 @@ var loginUri = function (type, location) {
 
 var findUserInfo = function (user, done) {
     if (!user) {
-        return done();
+        return done(new Error('!user'));
     }
     serand.emit('token', 'info', user.tid, user.access, function (err, token) {
         if (err) {
@@ -113,7 +113,7 @@ $.ajax = function (options) {
         success.apply(null, Array.prototype.slice.call(arguments));
     };
     options.error = function (xhr, status, err) {
-        if (xhr.status !== 401 || options.token || options.count > 0 || options.primary) {
+        if (!user || xhr.status !== 401 || options.token || options.count > 0 || options.primary) {
             error.apply(null, Array.prototype.slice.call(arguments));
             return;
         }
@@ -195,6 +195,12 @@ var initialize = function () {
         return emitup(null);
     }
     refresh(usr, function (err, usr) {
+        if (err) {
+            return console.error(err);
+        }
+        if (!usr) {
+            return emitup(null);
+        }
         findUserInfo(usr, function (err, usr) {
             if (err) {
                 console.error(err)
@@ -243,14 +249,7 @@ var refresh = function (usr, done) {
 
 var authenticator = function (options, done) {
     var type = options.type;
-    if (boot) {
-        return done(null, loginUri(type, options.location));
-    }
-    var o = context[type];
-    o.pending = {
-        options: options,
-        done: done
-    };
+    done(null, loginUri(type, options.location));
 };
 
 module.exports.can = function (permission, action) {
