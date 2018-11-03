@@ -262,7 +262,7 @@ serand.on('user', 'logout', function () {
     }
     $.ajax({
         method: 'DELETE',
-        url: utils.resolve('accounts:///apis/v/tokens/' + user.access),
+        url: utils.resolve('accounts:///apis/v/tokens/' + user.tid),
         dataType: 'json',
         success: function (data) {
             emitup(null);
