@@ -6,6 +6,7 @@
     "main": "index.js",
     "dependencies": {
         "serandomps/serand": "master",
-        "serandomps/utils": "master"
+        "serandomps/utils": "master",
+        "serandomps/token": "master"
     }
 }

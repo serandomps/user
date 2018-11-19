@@ -1,5 +1,6 @@
 var serand = require('serand');
 var utils = require('utils');
+var token = require('token');
 
 var perms = require('./permissions');
 
@@ -29,7 +30,7 @@ var ajax = $.ajax;
 
 var queue = [];
 
-var token = false;
+var tokenPending = false;
 
 var boot = false;
 
@@ -49,11 +50,11 @@ var findUserInfo = function (user, done) {
     if (!user) {
         return done(new Error('!user'));
     }
-    serand.emit('token', 'info', user.tid, user.access, function (err, token) {
+    token.findOne(user.tid, user.access, function (err, token) {
         if (err) {
             return done(err);
         }
-        serand.emit('user', 'info', token.user, user.access, function (err, usr) {
+        module.exports.findOne(token.user, user.access, function (err, usr) {
             if (err) {
                 return done(err);
             }
@@ -101,7 +102,7 @@ var later = function (task, after) {
 };
 
 $.ajax = function (options) {
-    if (token && !options.token) {
+    if (tokenPending && !options.token) {
         queue.push(options);
         return;
     }
@@ -117,9 +118,9 @@ $.ajax = function (options) {
             return;
         }
         console.log('transparently retrying unauthorized request');
-        token = true;
+        tokenPending = true;
         refresh(user, function (err) {
-            token = false;
+            tokenPending = false;
             if (err) {
                 error({status: 401});
                 queue.forEach(function (options) {
@@ -246,11 +247,6 @@ var refresh = function (usr, done) {
     });
 };
 
-var authenticator = function (options, done) {
-    var type = options.type;
-    done(null, loginUri(type, options.location));
-};
-
 module.exports.can = function (permission, action) {
     var tree = user.permissions || permissions;
     return perms.can(tree, permission, action);
@@ -297,35 +293,77 @@ serand.on('user', 'logged in', function (usr) {
     });
 });
 
-serand.on('user', 'authenticator', function (options, done) {
-    if (!done) {
-        done = options;
-        options = {};
-    }
-    authenticator(options, done);
-});
+var userInfo = null;
 
-serand.on('user', 'info', function (id, token, done) {
+module.exports.findOne = function (id, token, done) {
     if (!done) {
         done = token;
         token = null;
     }
-    var options = {
-        method: 'GET',
-        url: utils.resolve('accounts:///apis/v/users/' + id),
+    utils.sync('user-findone-' + id, function (did) {
+        if (userInfo) {
+            return did(null, userInfo);
+        }
+        var options = {
+            method: 'GET',
+            url: utils.resolve('accounts:///apis/v/users/' + id),
+            dataType: 'json',
+            success: function (user) {
+                if (!user.avatar) {
+                    userInfo = user;
+                    return did(null, user);
+                }
+                utils.cdn('images', '/images/288x162/' + user.avatar, function (err, url) {
+                    if (err) {
+                        return did(err);
+                    }
+                    user._.avatar = url;
+                    userInfo = user;
+                    did(null, user);
+                });
+            },
+            error: function (xhr, status, err) {
+                did(err || status || xhr);
+            }
+        };
+        if (token) {
+            options.headers = options.headers || {};
+            options.headers['Authorization'] = 'Bearer ' + token;
+        }
+        $.ajax(options);
+    }, done);
+};
+
+
+exports.update = function (user, data, done) {
+    var otp = data.otp;
+    delete data.otp;
+    _.merge(user, data);
+    var clone = _.cloneDeep(user);
+    delete clone._;
+
+    var headers = {};
+    otp = otp ? otp.value : null;
+    if (otp) {
+        headers['X-OTP'] = otp;
+    }
+    $.ajax({
+        method: 'PUT',
+        url: utils.resolve('accounts:///apis/v/users/' + user.id),
         dataType: 'json',
-        success: function (user) {
-            done(null, user);
+        contentType: 'application/json',
+        data: JSON.stringify(clone),
+        headers: headers,
+        success: function (data) {
+            done(null, data);
         },
         error: function (xhr, status, err) {
-            done(err || status || xhr);
+            if (xhr.status === 401) {
+                return done(null, 'Old password you entered is incorrect');
+            }
+            done(err);
         }
-    };
-    if (token) {
-        options.headers = options.headers || {};
-        options.headers['Authorization'] = 'Bearer ' + token;
-    }
-    $.ajax(options);
-});
+    });
+};
 
 //TODO: token needs to return user id etc. so, later that user id is used to retrieve user info
