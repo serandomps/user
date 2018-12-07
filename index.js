@@ -317,6 +317,7 @@ module.exports.findOne = function (id, token, done) {
                     if (err) {
                         return did(err);
                     }
+                    user._ = user._ || (user._ = {});
                     user._.avatar = url;
                     userInfo = user;
                     did(null, user);
