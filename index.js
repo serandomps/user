@@ -148,7 +148,6 @@ $.ajax = function (options) {
         headers = options.headers || (options.headers = {});
         headers['Authorization'] = headers['Authorization'] || ('Bearer ' + user.access);
     }
-    console.log(options);
     return ajax.call($, options);
 };
 
