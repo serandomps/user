@@ -277,7 +277,7 @@ serand.on('stored', 'user', function (usr) {
     user = usr;
 });
 
-serand.on('user', 'logged in', function (usr) {
+serand.on('user', 'initialize', function (usr, options) {
     findUserInfo(usr, function (err, usr) {
         if (err) {
             console.error(err)
@@ -289,6 +289,7 @@ serand.on('user', 'logged in', function (usr) {
         later(function () {
             refresh(user);
         }, nxt);
+        serand.emit('user', 'logged in', usr, options);
     });
 });
 
@@ -365,5 +366,3 @@ exports.update = function (user, data, done) {
         }
     });
 };
-
-//TODO: token needs to return user id etc. so, later that user id is used to retrieve user info
