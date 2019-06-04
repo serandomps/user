@@ -43,13 +43,8 @@ sera.is = function (name) {
         return false;
     }
     var groups = _.keyBy(sera.configs.groups, 'name');
-    var allowed = {};
-    user.permissions.forEach(function (perm) {
-        var id = perm.user || perm.group;
-        allowed[id] = (allowed[id] || []).concat(perm.actions);
-    });
     var group = groups[name];
-    return group && !!allowed[group.id];
+    return user.groups.indexOf(group.id) !== -1;
 };
 
 var loginUri = function (type, location) {
