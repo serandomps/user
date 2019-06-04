@@ -20,7 +20,7 @@ var context = {
     }
 };
 
-var user;
+var currentToken;
 
 var refresher;
 
@@ -37,6 +37,21 @@ var boot = false;
 //anon permissions
 var permissions = {};
 
+sera.is = function (name) {
+    var user = sera.user;
+    if (!user) {
+        return false;
+    }
+    var groups = _.keyBy(sera.configs.groups, 'name');
+    var allowed = {};
+    user.permissions.forEach(function (perm) {
+        var id = perm.user || perm.group;
+        allowed[id] = (allowed[id] || []).concat(perm.actions);
+    });
+    var group = groups[name];
+    return group && !!allowed[group.id];
+};
+
 var loginUri = function (type, location) {
     var o = context[type];
     location = location || o.location;
@@ -46,52 +61,42 @@ var loginUri = function (type, location) {
     return url;
 };
 
-var findUserInfo = function (user, done) {
-    if (!user) {
-        return done(new Error('!user'));
-    }
-    token.findOne(user.tid, user.access, function (err, token) {
+var findUserInfo = function (id, access, done) {
+    module.exports.findOne(id, access, function (err, usr) {
         if (err) {
             return done(err);
         }
-        module.exports.findOne(token.user, user.access, function (err, usr) {
-            if (err) {
-                return done(err);
-            }
-            user.id = usr.id;
-            user.username = usr.email;
-            done(null, user);
-        });
+        done(null, usr);
     });
 };
 
-var emit = function (usr) {
+var emit = function (tk) {
     if (!ready) {
         ready = true;
-        serand.emit('user', 'ready', usr);
-        return usr;
+        serand.emit('user', 'ready', tk);
+        return tk;
     }
-    if (usr) {
-        user ? serand.emit('user', 'refreshed', usr) : serand.emit('user', 'logged in', usr);
-        return usr;
+    if (tk) {
+        currentToken ? serand.emit('user', 'refreshed', tk) : serand.emit('user', 'logged in', tk);
+        return tk;
     }
-    if (user) {
+    if (currentToken) {
         serand.emit('user', 'logged out', null);
     }
 };
 
-var update = function (usr) {
-    user = usr;
-    serand.store('user', usr);
-    if (!usr) {
+var update = function (tk) {
+    currentToken = tk;
+    serand.store('token', tk);
+    if (!tk) {
         clearTimeout(refresher);
     }
-    return usr;
+    return tk;
 };
 
-var emitup = function (usr) {
-    emit(usr);
-    update(usr);
+var emitup = function (tk) {
+    emit(tk);
+    update(tk);
 };
 
 var later = function (task, after) {
@@ -113,13 +118,13 @@ $.ajax = function (options) {
         success.apply(null, Array.prototype.slice.call(arguments));
     };
     options.error = function (xhr, status, err) {
-        if (!user || xhr.status !== 401 || options.token || options.count > 0 || options.primary) {
+        if (!currentToken || xhr.status !== 401 || options.token || options.count > 0 || options.primary) {
             error.apply(null, Array.prototype.slice.call(arguments));
             return;
         }
         console.log('transparently retrying unauthorized request');
         tokenPending = true;
-        refresh(user, function (err) {
+        refresh(currentToken, function (err, tk) {
             tokenPending = false;
             if (err) {
                 error({status: 401});
@@ -133,6 +138,7 @@ $.ajax = function (options) {
                 serand.emit('user', 'login');
                 return;
             }
+            emitup(tk);
             options.success = success;
             options.error = error;
             options.count++;
@@ -144,9 +150,9 @@ $.ajax = function (options) {
         });
     };
     var headers;
-    if (user) {
+    if (currentToken) {
         headers = options.headers || (options.headers = {});
-        headers['Authorization'] = headers['Authorization'] || ('Bearer ' + user.access);
+        headers['Authorization'] = headers['Authorization'] || ('Bearer ' + currentToken.access);
     }
     return ajax.call($, options);
 };
@@ -184,36 +190,40 @@ var next = function (expires) {
 };
 
 var initialize = function () {
-    var usr = serand.store('user');
-    if (!usr) {
+    var tk = serand.store('token');
+    if (!tk) {
         return emitup(null);
     }
-    console.log(usr);
-    var nxt = next(usr.expires);
+    console.log('initialize', tk);
+    var nxt = next(tk.expires);
     if (!nxt) {
         return emitup(null);
     }
-    refresh(usr, function (err, usr) {
+    refresh(tk, function (err, tk) {
         if (err) {
-            return console.error(err);
+            console.error(err);
         }
-        if (!usr) {
+        if (!tk) {
             return emitup(null);
         }
-        findUserInfo(usr, function (err, usr) {
+        if (tk.user.id) {
+            return emitup(tk);
+        }
+        findUserInfo(tk.user.id, tk.access, function (err, usr) {
             if (err) {
-                console.error(err)
+                console.error(err);
                 return
             }
-            emitup(usr);
+            tk.user = usr;
+            emitup(tk);
         });
     });
 };
 
-var refresh = function (usr, done) {
+var refresh = function (tk, done) {
     done = done || serand.none;
-    if (!usr) {
-        return done('!user');
+    if (!tk) {
+        return done('!token');
     }
     $.ajax({
         token: true,
@@ -221,43 +231,46 @@ var refresh = function (usr, done) {
         url: utils.resolve('accounts:///apis/v/tokens'),
         data: {
             grant_type: 'refresh_token',
-            refresh_token: usr.refresh
+            refresh_token: tk.refresh
         },
         contentType: 'application/x-www-form-urlencoded',
         dataType: 'json',
         success: function (data) {
-            usr.access = data.access_token;
-            usr.refresh = data.refresh_token;
-            usr.expires = expires(data.expires_in);
-            emitup(usr);
+            tk.access = data.access_token;
+            tk.refresh = data.refresh_token;
+            tk.expires = expires(data.expires_in);
             console.log('token refresh successful');
-            var nxt = next(usr.expires);
+            var nxt = next(tk.expires);
             console.log('next refresh in : ' + Math.floor(nxt / 1000));
             later(function () {
-                refresh(user);
+                refresh(currentToken, function (err, tk) {
+                    if (err) {
+                        console.error(err);
+                    }
+                    emitup(tk);
+                });
             }, nxt);
-            done(null, usr);
+            done(null, tk);
         },
         error: function (xhr, one, two) {
             console.log('token refresh error');
-            emitup(null);
             done(xhr);
         }
     });
 };
 
 module.exports.can = function (permission, action) {
-    var tree = user.permissions || permissions;
+    var tree = currentToken.permissions || permissions;
     return perms.can(tree, permission, action);
 };
 
 serand.on('user', 'logout', function () {
-    if (!user) {
+    if (!currentToken) {
         return;
     }
     $.ajax({
         method: 'DELETE',
-        url: utils.resolve('accounts:///apis/v/tokens/' + user.tid),
+        url: utils.resolve('accounts:///apis/v/tokens/' + currentToken.id),
         dataType: 'json',
         success: function (data) {
             emitup(null);
@@ -272,33 +285,59 @@ serand.on('serand', 'ready', function () {
     initialize();
 });
 
-serand.on('stored', 'user', function (usr) {
-    emit(usr);
-    user = usr;
+serand.on('stored', 'token', function (tk) {
+    emit(tk);
+    currentToken = tk;
 });
 
-serand.on('user', 'initialize', function (usr, options) {
-    findUserInfo(usr, function (err, usr) {
+serand.on('user', 'initialize', function (o, options) {
+    token.findOne(o.tid, o.access, function (err, tk) {
         if (err) {
-            console.error(err)
-            return
+            return console.error(err);
         }
-        update(usr);
-        var nxt = next(usr.expires);
-        console.log('next refresh in : ' + Math.floor(nxt / 1000));
-        later(function () {
-            refresh(user);
-        }, nxt);
-        serand.emit('user', 'logged in', usr, options);
+        findUserInfo(tk.user, o.access, function (err, usr) {
+            if (err) {
+                console.error(err)
+                return
+            }
+            tk.user = usr;
+            update(tk);
+            var nxt = next(tk.expires);
+            console.log('next refresh in : ' + Math.floor(nxt / 1000));
+            later(function () {
+                refresh(currentToken, function (err, tk) {
+                    if (err) {
+                        console.error(err);
+                    }
+                    emitup(tk);
+                });
+            }, nxt);
+            serand.emit('user', 'logged in', tk, options);
+        });
     });
+});
+
+serand.on('user', 'token', function (tk, options) {
+    update(tk);
+    var nxt = next(tk.expires);
+    console.log('next refresh in : ' + Math.floor(nxt / 1000));
+    later(function () {
+        refresh(currentToken, function (err, tk) {
+            if (err) {
+                console.error(err);
+            }
+            emitup(tk);
+        });
+    }, nxt);
+    serand.emit('user', 'logged in', tk, options);
 });
 
 var userInfo = null;
 
-module.exports.findOne = function (id, token, done) {
+module.exports.findOne = function (id, access, done) {
     if (!done) {
-        done = token;
-        token = null;
+        done = access;
+        access = null;
     }
     utils.sync('user-findone-' + id, function (did) {
         if (userInfo) {
@@ -327,9 +366,9 @@ module.exports.findOne = function (id, token, done) {
                 did(err || status || xhr);
             }
         };
-        if (token) {
+        if (access) {
             options.headers = options.headers || {};
-            options.headers['Authorization'] = 'Bearer ' + token;
+            options.headers['Authorization'] = 'Bearer ' + access;
         }
         $.ajax(options);
     }, done);
