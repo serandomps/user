@@ -42,8 +42,11 @@ sera.is = function (name) {
     if (!user) {
         return false;
     }
-    var groups = _.keyBy(sera.configs.groups, 'name');
+    var groups = utils.groups();
     var group = groups[name];
+    if (!group) {
+        return false;
+    }
     return user.groups.indexOf(group.id) !== -1;
 };
 
