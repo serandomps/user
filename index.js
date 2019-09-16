@@ -71,15 +71,15 @@ var findUserInfo = function (id, access, done) {
 var emit = function (tk) {
     if (!ready) {
         ready = true;
-        serand.emit('user', 'ready', tk);
+        utils.emit('user', 'ready', tk);
         return tk;
     }
     if (tk) {
-        currentToken ? serand.emit('user', 'refreshed', tk) : serand.emit('user', 'logged in', tk);
+        currentToken ? utils.emit('user', 'refreshed', tk) : utils.emit('user', 'logged in', tk);
         return tk;
     }
     if (currentToken) {
-        serand.emit('user', 'logged out', null);
+        utils.emit('user', 'logged out', null);
     }
 };
 
@@ -133,7 +133,7 @@ $.ajax = function (options) {
                     options.error({status: 401});
                 });
                 queue = [];
-                serand.emit('user', 'login');
+                utils.emit('user', 'login');
                 return;
             }
             emitup(tk);
@@ -262,7 +262,7 @@ module.exports.can = function (permission, action) {
     return perms.can(tree, permission, action);
 };
 
-serand.on('user', 'logout', function () {
+utils.on('user', 'logout', function () {
     if (!currentToken) {
         return;
     }
@@ -274,21 +274,21 @@ serand.on('user', 'logout', function () {
             emitup(null);
         },
         error: function (xhr, status, err) {
-            serand.emit('user', 'logout error', err || status || xhr);
+            utils.emit('user', 'logout error', err || status || xhr);
         }
     });
 });
 
-serand.on('serand', 'ready', function () {
+utils.on('serand', 'ready', function () {
     initialize();
 });
 
-serand.on('stored', 'token', function (tk) {
+utils.on('stored', 'token', function (tk) {
     emit(tk);
     currentToken = tk;
 });
 
-serand.on('user', 'initialize', function (o, options) {
+utils.on('user', 'initialize', function (o, options) {
     token.findOne(o.tid, o.access, function (err, tk) {
         if (err) {
             return console.error(err);
@@ -310,12 +310,12 @@ serand.on('user', 'initialize', function (o, options) {
                     emitup(tk);
                 });
             }, nxt);
-            serand.emit('user', 'logged in', tk, options);
+            utils.emit('user', 'logged in', tk, options);
         });
     });
 });
 
-serand.on('user', 'token', function (tk, options) {
+utils.on('user', 'token', function (tk, options) {
     update(tk);
     var nxt = next(tk.expires);
     console.log('next refresh in : ' + Math.floor(nxt / 1000));
@@ -327,7 +327,7 @@ serand.on('user', 'token', function (tk, options) {
             emitup(tk);
         });
     }, nxt);
-    serand.emit('user', 'logged in', tk, options);
+    utils.emit('user', 'logged in', tk, options);
 });
 
 var userInfo = null;
