@@ -330,7 +330,7 @@ utils.on('user', 'token', function (tk, options) {
     utils.emit('user', 'logged in', tk, options);
 });
 
-var userInfo = null;
+var users = {};
 
 module.exports.findOne = function (id, access, done) {
     if (!done) {
@@ -338,25 +338,26 @@ module.exports.findOne = function (id, access, done) {
         access = null;
     }
     utils.sync('user-findone-' + id, function (did) {
-        if (userInfo) {
-            return did(null, userInfo);
+        if (users[id]) {
+            return did(null, users[id]);
         }
         var options = {
             method: 'GET',
             url: utils.resolve('accounts:///apis/v/users/' + id),
             dataType: 'json',
             success: function (user) {
+                user._ = user._ || (user._ = {});
+                user._.initials = utils.initials(user.alias);
                 if (!user.avatar) {
-                    userInfo = user;
+                    users[id] = user;
                     return did(null, user);
                 }
                 utils.cdn('images', '/images/288x162/' + user.avatar, function (err, url) {
                     if (err) {
                         return did(err);
                     }
-                    user._ = user._ || (user._ = {});
                     user._.avatar = url;
-                    userInfo = user;
+                    users[id] = user;
                     did(null, user);
                 });
             },
