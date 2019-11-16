@@ -332,6 +332,23 @@ utils.on('user', 'token', function (tk, options) {
 
 var users = {};
 
+var updated = function (user, done) {
+    user._ = user._ || (user._ = {});
+    user._.initials = utils.initials(user.alias);
+    if (!user.avatar) {
+        users[user.id] = user;
+        return done(null, user);
+    }
+    utils.cdn('images', '/images/288x162/' + user.avatar, function (err, url) {
+        if (err) {
+            return done(err);
+        }
+        user._.avatar = url;
+        users[user.id] = user;
+        done(null, user);
+    });
+};
+
 module.exports.findOne = function (id, access, done) {
     if (!done) {
         done = access;
@@ -346,20 +363,7 @@ module.exports.findOne = function (id, access, done) {
             url: utils.resolve('accounts:///apis/v/users/' + id),
             dataType: 'json',
             success: function (user) {
-                user._ = user._ || (user._ = {});
-                user._.initials = utils.initials(user.alias);
-                if (!user.avatar) {
-                    users[id] = user;
-                    return did(null, user);
-                }
-                utils.cdn('images', '/images/288x162/' + user.avatar, function (err, url) {
-                    if (err) {
-                        return did(err);
-                    }
-                    user._.avatar = url;
-                    users[id] = user;
-                    did(null, user);
-                });
+                updated(user, did);
             },
             error: function (xhr, status, err) {
                 did(err || status || xhr);
@@ -377,7 +381,9 @@ module.exports.findOne = function (id, access, done) {
 exports.update = function (user, data, done) {
     var otp = data.otp;
     delete data.otp;
-    _.merge(user, data);
+    _.mergeWith(user, data, function (dest, src) {
+        return src || null;
+    });
     var clone = _.cloneDeep(user);
     delete clone._;
 
@@ -394,7 +400,7 @@ exports.update = function (user, data, done) {
         data: JSON.stringify(clone),
         headers: headers,
         success: function (data) {
-            done(null, data);
+            updated(data, done);
         },
         error: function (xhr, status, err) {
             if (xhr.status === 401) {
