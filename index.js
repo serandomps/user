@@ -339,7 +339,7 @@ var updated = function (user, done) {
         users[user.id] = user;
         return done(null, user);
     }
-    utils.cdn('images', '/images/288x162/' + user.avatar, function (err, url) {
+    utils.cdn('images', '/images/160x160/' + user.avatar, function (err, url) {
         if (err) {
             return done(err);
         }
