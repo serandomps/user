@@ -388,7 +388,7 @@ exports.update = function (user, data, done) {
     delete clone._;
 
     var headers = {};
-    otp = otp ? otp.value : null;
+    otp = otp ? otp.strong : null;
     if (otp) {
         headers['X-OTP'] = otp;
     }
