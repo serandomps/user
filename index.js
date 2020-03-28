@@ -410,3 +410,17 @@ exports.update = function (user, data, done) {
         }
     });
 };
+
+exports.find = function (options, done) {
+    $.ajax({
+        method: 'GET',
+        url: utils.resolve('accounts:///apis/v/users' + utils.toData(options.query)),
+        dataType: 'json',
+        success: function (data, status, xhr) {
+            done(null, data);
+        },
+        error: function (xhr, status, err) {
+            done(err || status || xhr);
+        }
+    });
+};
