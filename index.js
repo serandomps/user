@@ -8,17 +8,16 @@ var REFRESH_BEFORE = 10 * 1000;
 
 var MAX_TIMEOUT_DELAY = 2147483647;
 
-//TODO: move these facebook etc. configs to account-signin, since this relates only to accounts.com
+/*//TODO: move these facebook etc. configs to account-signin, since this relates only to accounts.com
 var context = {
     serandives: {
         login: utils.resolve('accounts:///signin')
     },
     facebook: {
-        login: 'https://www.facebook.com/dialog/oauth',
         location: utils.resolve('accounts:///auth/oauth'),
         scopes: ['email', 'public_profile']
     }
-};
+};*/
 
 var currentToken;
 
@@ -50,14 +49,15 @@ sera.is = function (name) {
     return user.groups.indexOf(group.id) !== -1;
 };
 
+/*
 var loginUri = function (type, location) {
     var o = context[type];
     location = location || o.location;
-    var url = o.login + '?client_id=' + o.client
+    var url = o.login + '?client_id=' + o.client.id
         + (location ? '&redirect_uri=' + location : '')
         + (o.scopes ? '&scope=' + o.scopes.join(',') : '');
     return url;
-};
+};*/
 
 var findUserInfo = function (id, access, done) {
     module.exports.findOne(id, access, function (err, usr) {
@@ -155,7 +155,7 @@ $.ajax = function (options) {
     return ajax.call($, options);
 };
 
-utils.configs('boot', function (err, config) {
+/*utils.configs('boot', function (err, config) {
     if (err) {
         return console.error(err);
     }
@@ -166,7 +166,14 @@ utils.configs('boot', function (err, config) {
             continue;
         }
         var o = context[name];
-        o.client = clients[name];
+        var client = clients[name];
+        var key;
+        for (key in client) {
+            if (!client.hasOwnProperty(key)) {
+                continue;
+            }
+            o[key] = client[key];
+        }
         var pending = o.pending;
         if (!pending) {
             continue;
@@ -176,7 +183,7 @@ utils.configs('boot', function (err, config) {
         delete o.pending;
     }
     boot = true;
-});
+});*/
 
 var expires = function (expin) {
     return new Date().getTime() + expin - REFRESH_BEFORE;
