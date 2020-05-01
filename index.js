@@ -341,7 +341,7 @@ var users = {};
 
 var updated = function (user, done) {
     user._ = user._ || (user._ = {});
-    user._.initials = utils.initials(user.alias);
+    user._.initials = utils.initials(user.username);
     if (!user.avatar) {
         users[user.id] = user;
         return done(null, user);
