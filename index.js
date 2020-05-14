@@ -8,17 +8,6 @@ var REFRESH_BEFORE = 10 * 1000;
 
 var MAX_TIMEOUT_DELAY = 2147483647;
 
-/*//TODO: move these facebook etc. configs to account-signin, since this relates only to accounts.com
-var context = {
-    serandives: {
-        login: utils.resolve('accounts:///signin')
-    },
-    facebook: {
-        location: utils.resolve('accounts:///auth/oauth'),
-        scopes: ['email', 'public_profile']
-    }
-};*/
-
 var currentToken;
 
 var refresher;
@@ -85,7 +74,9 @@ var emit = function (tk) {
 
 var update = function (tk) {
     currentToken = tk;
-    serand.store('token', tk);
+    Cookies.set('token', JSON.stringify(tk), {
+        domain: utils.domain()
+    });
     if (!tk) {
         clearTimeout(refresher);
     }
@@ -122,7 +113,7 @@ $.ajax = function (options) {
         }
         console.log('transparently retrying unauthorized request');
         tokenPending = true;
-        refresh(currentToken, function (err, tk) {
+        refresh(currentToken, {}, function (err, tk) {
             tokenPending = false;
             if (err) {
                 error({status: 401});
@@ -194,8 +185,20 @@ var next = function (expires) {
     return exp > 0 ? exp : null;
 };
 
+var findToken = function () {
+    var tk = Cookies.get('token');
+    if (!tk) {
+        return null;
+    }
+    try {
+        return JSON.parse(tk);
+    } catch (e) {
+        return null;
+    }
+};
+
 var initialize = function () {
-    var tk = serand.store('token');
+    var tk = findToken();
     if (!tk) {
         return emitup(null);
     }
@@ -204,7 +207,7 @@ var initialize = function () {
     if (!nxt) {
         return emitup(null);
     }
-    refresh(tk, function (err, tk) {
+    refresh(tk, {}, function (err, tk) {
         if (err) {
             console.error(err);
         }
@@ -225,7 +228,7 @@ var initialize = function () {
     });
 };
 
-var refresh = function (tk, done) {
+var refresh = function (tk, o, done) {
     done = done || serand.none;
     if (!tk) {
         return done('!token');
@@ -248,7 +251,7 @@ var refresh = function (tk, done) {
             var nxt = next(tk.expires);
             console.log('next refresh in : ' + Math.floor(nxt / 1000));
             later(function () {
-                refresh(currentToken, function (err, tk) {
+                refresh(currentToken, o, function (err, tk) {
                     if (err) {
                         console.error(err);
                     }
@@ -257,9 +260,14 @@ var refresh = function (tk, done) {
             }, nxt);
             done(null, tk);
         },
-        error: function (xhr, one, two) {
-            console.log('token refresh error');
-            done(xhr);
+        error: function (xhr) {
+            var tk = findToken();
+            if (!tk || xhr.status !== 401 || o.unauthorized) {
+                console.log('token refresh error');
+                return done(xhr);
+            }
+            o.unauthorized = true;
+            refresh(tk, o, done);
         }
     });
 };
@@ -310,7 +318,7 @@ utils.on('user', 'initialize', function (o, options) {
             var nxt = next(tk.expires);
             console.log('next refresh in : ' + Math.floor(nxt / 1000));
             later(function () {
-                refresh(currentToken, function (err, tk) {
+                refresh(currentToken, {}, function (err, tk) {
                     if (err) {
                         console.error(err);
                     }
@@ -327,7 +335,7 @@ utils.on('user', 'token', function (tk, options) {
     var nxt = next(tk.expires);
     console.log('next refresh in : ' + Math.floor(nxt / 1000));
     later(function () {
-        refresh(currentToken, function (err, tk) {
+        refresh(currentToken, {}, function (err, tk) {
             if (err) {
                 console.error(err);
             }
