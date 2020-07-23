@@ -236,7 +236,7 @@ var refresh = function (tk, o, done) {
     $.ajax({
         token: true,
         method: 'POST',
-        url: utils.resolve('accounts:///apis/v/tokens'),
+        url: utils.resolve('apis:///v/tokens'),
         data: {
             grant_type: 'refresh_token',
             refresh_token: tk.refresh
@@ -283,7 +283,7 @@ utils.on('user', 'logout', function () {
     }
     $.ajax({
         method: 'DELETE',
-        url: utils.resolve('accounts:///apis/v/tokens/' + currentToken.id),
+        url: utils.resolve('apis:///v/tokens/' + currentToken.id),
         dataType: 'json',
         success: function (data) {
             emitup(null);
@@ -375,7 +375,7 @@ module.exports.findOne = function (id, access, done) {
         }
         var options = {
             method: 'GET',
-            url: utils.resolve('accounts:///apis/v/users/' + id),
+            url: utils.resolve('apis:///v/users/' + id),
             dataType: 'json',
             success: function (user) {
                 updated(user, did);
@@ -409,7 +409,7 @@ exports.update = function (user, data, done) {
     }
     $.ajax({
         method: 'PUT',
-        url: utils.resolve('accounts:///apis/v/users/' + user.id),
+        url: utils.resolve('apis:///v/users/' + user.id),
         dataType: 'json',
         contentType: 'application/json',
         data: JSON.stringify(clone),
@@ -429,7 +429,7 @@ exports.update = function (user, data, done) {
 exports.find = function (options, done) {
     $.ajax({
         method: 'GET',
-        url: utils.resolve('accounts:///apis/v/users' + utils.toData(options.query)),
+        url: utils.resolve('apis:///v/users' + utils.toData(options.query)),
         dataType: 'json',
         success: function (data, status, xhr) {
             done(null, data);
