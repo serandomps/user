@@ -1,5 +1,6 @@
 var serand = require('serand');
 var utils = require('utils');
+var watcher = require('watcher');
 var token = require('token');
 
 var perms = require('./permissions');
@@ -57,22 +58,20 @@ var findUserInfo = function (id, access, done) {
     });
 };
 
-var emit = function (tk) {
+var emitUserEvents = function (tk) {
     if (!ready) {
         ready = true;
-        utils.emit('user', 'ready', tk);
+        watcher.emit('user', 'ready', tk);
         return tk;
     }
     if (tk) {
-        currentToken ? utils.emit('user', 'refreshed', tk) : utils.emit('user', 'logged in', tk);
+        currentToken ? watcher.emit('user', 'refreshed', tk) : watcher.emit('user', 'logged in', tk);
         return tk;
     }
-    if (currentToken) {
-        utils.emit('user', 'logged out', null);
-    }
+    watcher.emit('user', 'logged out', null);
 };
 
-var update = function (tk) {
+var updateToken = function (tk) {
     currentToken = tk;
     Cookies.set('token', JSON.stringify(tk), {
         domain: utils.domain()
@@ -83,9 +82,9 @@ var update = function (tk) {
     return tk;
 };
 
-var emitup = function (tk) {
-    emit(tk);
-    update(tk);
+var updateTokenAndEmitEvents = function (tk) {
+    updateToken(tk);
+    emitUserEvents(tk);
 };
 
 var later = function (task, after) {
@@ -124,10 +123,10 @@ $.ajax = function (options) {
                     options.error({status: 401});
                 });
                 queue = [];
-                utils.emit('user', 'login');
+                watcher.emit('user', 'login');
                 return;
             }
-            emitup(tk);
+            updateTokenAndEmitEvents(tk);
             options.success = success;
             options.error = error;
             options.count++;
@@ -200,22 +199,22 @@ var findToken = function () {
 var initialize = function () {
     var tk = findToken();
     if (!tk) {
-        return emitup(null);
+        return updateTokenAndEmitEvents(null);
     }
     console.log('initialize', tk);
     var nxt = next(tk.expires);
     if (!nxt) {
-        return emitup(null);
+        return updateTokenAndEmitEvents(null);
     }
     refresh(tk, {}, function (err, tk) {
         if (err) {
             console.error(err);
         }
         if (!tk) {
-            return emitup(null);
+            return updateTokenAndEmitEvents(null);
         }
         if (tk.user.id) {
-            return emitup(tk);
+            return updateTokenAndEmitEvents(tk);
         }
         findUserInfo(tk.user.id, tk.access, function (err, usr) {
             if (err) {
@@ -223,7 +222,7 @@ var initialize = function () {
                 return
             }
             tk.user = usr;
-            emitup(tk);
+            updateTokenAndEmitEvents(tk);
         });
     });
 };
@@ -255,7 +254,7 @@ var refresh = function (tk, o, done) {
                     if (err) {
                         console.error(err);
                     }
-                    emitup(tk);
+                    updateTokenAndEmitEvents(tk);
                 });
             }, nxt);
             done(null, tk);
@@ -277,7 +276,7 @@ module.exports.can = function (permission, action) {
     return perms.can(tree, permission, action);
 };
 
-utils.on('user', 'logout', function () {
+watcher.on('user', 'logout', function () {
     if (!currentToken) {
         return;
     }
@@ -286,24 +285,24 @@ utils.on('user', 'logout', function () {
         url: utils.resolve('apis:///v/tokens/' + currentToken.id),
         dataType: 'json',
         success: function (data) {
-            emitup(null);
+            updateTokenAndEmitEvents(null);
         },
         error: function (xhr, status, err) {
-            utils.emit('user', 'logout error', err || status || xhr);
+            watcher.emit('user', 'logout error', err || status || xhr);
         }
     });
 });
 
-utils.on('serand', 'ready', function () {
+watcher.on('serand', 'ready', function () {
     initialize();
 });
 
-utils.on('stored', 'token', function (tk) {
-    emit(tk);
+watcher.on('stored', 'token', function (tk) {
+    emitUserEvents(tk);
     currentToken = tk;
 });
 
-utils.on('user', 'initialize', function (o, options) {
+watcher.on('user', 'initialize', function (o, options) {
     token.findOne(o.tid, o.access, function (err, tk) {
         if (err) {
             return console.error(err);
@@ -314,7 +313,7 @@ utils.on('user', 'initialize', function (o, options) {
                 return
             }
             tk.user = usr;
-            update(tk);
+            updateToken(tk);
             var nxt = next(tk.expires);
             console.log('next refresh in : ' + Math.floor(nxt / 1000));
             later(function () {
@@ -322,16 +321,16 @@ utils.on('user', 'initialize', function (o, options) {
                     if (err) {
                         console.error(err);
                     }
-                    emitup(tk);
+                    updateTokenAndEmitEvents(tk);
                 });
             }, nxt);
-            utils.emit('user', 'logged in', tk, options);
+            watcher.emit('user', 'logged in', tk, options);
         });
     });
 });
 
-utils.on('user', 'token', function (tk, options) {
-    update(tk);
+watcher.on('user', 'token', function (tk, options) {
+    updateToken(tk);
     var nxt = next(tk.expires);
     console.log('next refresh in : ' + Math.floor(nxt / 1000));
     later(function () {
@@ -339,10 +338,10 @@ utils.on('user', 'token', function (tk, options) {
             if (err) {
                 console.error(err);
             }
-            emitup(tk);
+            updateTokenAndEmitEvents(tk);
         });
     }, nxt);
-    utils.emit('user', 'logged in', tk, options);
+    watcher.emit('user', 'logged in', tk, options);
 });
 
 var users = {};
